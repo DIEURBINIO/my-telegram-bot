@@ -4,37 +4,52 @@ from datetime import datetime, timedelta
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
 
-# Берём токен из переменной окружения
 TOKEN = os.getenv("TOKEN")
 
-# Состояния для ConversationHandler
 WAITING_FOR_DATE, WAITING_FOR_DATE_BIRTHDAY, WAITING_FOR_DATE_LIFE = range(3)
 
-# Клавиатура
 keyboard = [["Сколько дней я прожил"],
             ["Сколько дней до дня рождения"],
-            ["Сколько мне осталось жить"]]
+            ["Сколько мне осталось жить"],
+            ["/reset"]]
 
 markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Выберите действие:", reply_markup=markup)
 
+async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("birth_date", None)
+    await update.message.reply_text("Дата рождения удалена. В следующий раз вас попросят ввести её заново.", reply_markup=markup)
+
 async def ask_birthdate_lived(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "birth_date" in context.user_data:
+        await calculate_lived(update, context)
+        return ConversationHandler.END
     await update.message.reply_text("Введите дату рождения в формате ДД.ММ.ГГГГ:")
     return WAITING_FOR_DATE
 
 async def ask_birthdate_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "birth_date" in context.user_data:
+        await calculate_birthday(update, context)
+        return ConversationHandler.END
     await update.message.reply_text("Введите дату рождения в формате ДД.ММ.ГГГГ:")
     return WAITING_FOR_DATE_BIRTHDAY
 
 async def ask_birthdate_life(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if "birth_date" in context.user_data:
+        await calculate_life_expectancy(update, context)
+        return ConversationHandler.END
     await update.message.reply_text("Введите дату рождения в формате ДД.ММ.ГГГГ:")
     return WAITING_FOR_DATE_LIFE
 
 async def calculate_lived(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
+        if "birth_date" in context.user_data:
+            birth_date = context.user_data["birth_date"]
+        else:
+            birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
+            context.user_data["birth_date"] = birth_date
         days_lived = (datetime.now() - birth_date).days
         await update.message.reply_text(f"Вы прожили {days_lived} дней.", reply_markup=markup)
     except ValueError:
@@ -44,7 +59,11 @@ async def calculate_lived(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def calculate_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
+        if "birth_date" in context.user_data:
+            birth_date = context.user_data["birth_date"]
+        else:
+            birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
+            context.user_data["birth_date"] = birth_date
         today = datetime.now()
         next_birthday = birth_date.replace(year=today.year)
         if next_birthday < today:
@@ -58,8 +77,12 @@ async def calculate_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def calculate_life_expectancy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
-        life_expectancy_years = random.randint(60, 100)  # Рандомный прогноз
+        if "birth_date" in context.user_data:
+            birth_date = context.user_data["birth_date"]
+        else:
+            birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
+            context.user_data["birth_date"] = birth_date
+        life_expectancy_years = random.randint(60, 100)
         death_date = birth_date.replace(year=birth_date.year + life_expectancy_years)
         remaining_time = death_date - datetime.now()
 
@@ -100,6 +123,7 @@ def main():
     )
 
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("reset", reset))
     application.add_handler(conv_lived)
     application.add_handler(conv_birthday)
     application.add_handler(conv_life)
