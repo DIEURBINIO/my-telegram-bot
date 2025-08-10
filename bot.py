@@ -1,6 +1,6 @@
 import os
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, MessageHandler, filters,
@@ -64,12 +64,17 @@ async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"До вашего дня рождения осталось {days_left} дней.", reply_markup=markup)
     elif choice == "Сколько мне осталось жить":
         life_expectancy_years = random.randint(60, 100)
-        death_date = birth_date.replace(year=birth_date.year + life_expectancy_years)
+        base_death_year = birth_date.year + life_expectancy_years
+        death_base = birth_date.replace(year=base_death_year)
+        random_days = random.randint(0, 364)
+        death_date = death_base + timedelta(days=random_days)
+
         remaining = death_date - now
         years = remaining.days // 365
         months = (remaining.days % 365) // 30
         days = (remaining.days % 365) % 30
         hours = remaining.seconds // 3600
+
         await update.message.reply_text(
             f"Вам осталось примерно {years} лет, {months} месяцев, {days} дней и {hours} часов.\n"
             f"Предположительная дата смерти: {death_date.strftime('%d.%m.%Y')}",
