@@ -1,12 +1,15 @@
 import os
 import random
-from datetime import datetime, timedelta
+from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, ConversationHandler
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, filters,
+    ContextTypes, ConversationHandler
+)
 
 TOKEN = os.getenv("TOKEN")
 
-WAITING_FOR_DATE, WAITING_FOR_DATE_BIRTHDAY, WAITING_FOR_DATE_LIFE = range(3)
+ASK_BIRTHDATE, CHOOSING_ACTION = range(2)
 
 keyboard = [
     ["Сколько дней я прожил"],
@@ -14,131 +17,92 @@ keyboard = [
     ["Сколько мне осталось жить"],
     ["/reset"]
 ]
-
 markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Выберите действие:", reply_markup=markup)
+    await update.message.reply_text(
+        "Привет! Пожалуйста, введи дату рождения в формате ДД.ММ.ГГГГ:"
+    )
+    return ASK_BIRTHDATE
 
-async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.pop("birth_date_str", None)
-    await update.message.reply_text("Дата рождения удалена. В следующий раз вас попросят ввести её заново.", reply_markup=markup)
-
-async def ask_birthdate_lived(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "birth_date_str" in context.user_data:
-        await calculate_lived(update, context)
-        return ConversationHandler.END
-    await update.message.reply_text("Введите дату рождения в формате ДД.ММ.ГГГГ:")
-    return WAITING_FOR_DATE
-
-async def ask_birthdate_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "birth_date_str" in context.user_data:
-        await calculate_birthday(update, context)
-        return ConversationHandler.END
-    await update.message.reply_text("Введите дату рождения в формате ДД.ММ.ГГГГ:")
-    return WAITING_FOR_DATE_BIRTHDAY
-
-async def ask_birthdate_life(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "birth_date_str" in context.user_data:
-        await calculate_life_expectancy(update, context)
-        return ConversationHandler.END
-    await update.message.reply_text("Введите дату рождения в формате ДД.ММ.ГГГГ:")
-    return WAITING_FOR_DATE_LIFE
-
-def parse_birth_date(date_str):
-    return datetime.strptime(date_str, "%d.%m.%Y")
-
-async def calculate_lived(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def ask_birthdate(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    text = update.message.text
     try:
-        if "birth_date_str" in context.user_data:
-            birth_date_str = context.user_data["birth_date_str"]
-        else:
-            birth_date_str = update.message.text
-            context.user_data["birth_date_str"] = birth_date_str
+        birth_date = datetime.strptime(text, "%d.%m.%Y")
+        context.user_data["birth_date_str"] = text
+        await update.message.reply_text(
+            "Отлично! Теперь выбери действие:",
+            reply_markup=markup
+        )
+        return CHOOSING_ACTION
+    except ValueError:
+        await update.message.reply_text(
+            "Неверный формат даты! Попробуй снова в формате ДД.ММ.ГГГГ:"
+        )
+        return ASK_BIRTHDATE
 
-        birth_date = parse_birth_date(birth_date_str)
-        days_lived = (datetime.now() - birth_date).days
+async def handle_choice(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    choice = update.message.text
+    birth_date_str = context.user_data.get("birth_date_str")
+    if not birth_date_str:
+        await update.message.reply_text(
+            "Дата рождения не найдена. Введи её заново в формате ДД.ММ.ГГГГ:"
+        )
+        return ASK_BIRTHDATE
+
+    birth_date = datetime.strptime(birth_date_str, "%d.%m.%Y")
+    now = datetime.now()
+
+    if choice == "Сколько дней я прожил":
+        days_lived = (now - birth_date).days
         await update.message.reply_text(f"Вы прожили {days_lived} дней.", reply_markup=markup)
-    except ValueError:
-        await update.message.reply_text("Неверный формат даты. Попробуйте снова.")
-        return WAITING_FOR_DATE
-    return ConversationHandler.END
-
-async def calculate_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        if "birth_date_str" in context.user_data:
-            birth_date_str = context.user_data["birth_date_str"]
-        else:
-            birth_date_str = update.message.text
-            context.user_data["birth_date_str"] = birth_date_str
-
-        birth_date = parse_birth_date(birth_date_str)
-        today = datetime.now()
-        next_birthday = birth_date.replace(year=today.year)
-        if next_birthday < today:
-            next_birthday = next_birthday.replace(year=today.year + 1)
-        days_left = (next_birthday - today).days
+    elif choice == "Сколько дней до дня рождения":
+        next_birthday = birth_date.replace(year=now.year)
+        if next_birthday < now:
+            next_birthday = next_birthday.replace(year=now.year + 1)
+        days_left = (next_birthday - now).days
         await update.message.reply_text(f"До вашего дня рождения осталось {days_left} дней.", reply_markup=markup)
-    except ValueError:
-        await update.message.reply_text("Неверный формат даты. Попробуйте снова.")
-        return WAITING_FOR_DATE_BIRTHDAY
-    return ConversationHandler.END
-
-async def calculate_life_expectancy(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        if "birth_date_str" in context.user_data:
-            birth_date_str = context.user_data["birth_date_str"]
-        else:
-            birth_date_str = update.message.text
-            context.user_data["birth_date_str"] = birth_date_str
-
-        birth_date = parse_birth_date(birth_date_str)
+    elif choice == "Сколько мне осталось жить":
         life_expectancy_years = random.randint(60, 100)
         death_date = birth_date.replace(year=birth_date.year + life_expectancy_years)
-        remaining_time = death_date - datetime.now()
-
-        years = remaining_time.days // 365
-        months = (remaining_time.days % 365) // 30
-        days = (remaining_time.days % 365) % 30
-        hours = remaining_time.seconds // 3600
-
+        remaining = death_date - now
+        years = remaining.days // 365
+        months = (remaining.days % 365) // 30
+        days = (remaining.days % 365) % 30
+        hours = remaining.seconds // 3600
         await update.message.reply_text(
             f"Вам осталось примерно {years} лет, {months} месяцев, {days} дней и {hours} часов.\n"
             f"Предположительная дата смерти: {death_date.strftime('%d.%m.%Y')}",
             reply_markup=markup
         )
-    except ValueError:
-        await update.message.reply_text("Неверный формат даты. Попробуйте снова.")
-        return WAITING_FOR_DATE_LIFE
+    else:
+        await update.message.reply_text("Пожалуйста, выберите действие с помощью кнопок.", reply_markup=markup)
+    return CHOOSING_ACTION
+
+async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.pop("birth_date_str", None)
+    await update.message.reply_text(
+        "Дата рождения удалена. Введите новую дату рождения в формате ДД.ММ.ГГГГ:"
+    )
+    return ASK_BIRTHDATE
+
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("До встречи!")
     return ConversationHandler.END
 
 def main():
     application = Application.builder().token(TOKEN).build()
 
-    conv_lived = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^Сколько дней я прожил$"), ask_birthdate_lived)],
-        states={WAITING_FOR_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, calculate_lived)]},
-        fallbacks=[],
+    conv_handler = ConversationHandler(
+        entry_points=[CommandHandler('start', start)],
+        states={
+            ASK_BIRTHDATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, ask_birthdate)],
+            CHOOSING_ACTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_choice)]
+        },
+        fallbacks=[CommandHandler('reset', reset), CommandHandler('cancel', cancel)]
     )
 
-    conv_birthday = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^Сколько дней до дня рождения$"), ask_birthdate_birthday)],
-        states={WAITING_FOR_DATE_BIRTHDAY: [MessageHandler(filters.TEXT & ~filters.COMMAND, calculate_birthday)]},
-        fallbacks=[],
-    )
-
-    conv_life = ConversationHandler(
-        entry_points=[MessageHandler(filters.Regex("^Сколько мне осталось жить$"), ask_birthdate_life)],
-        states={WAITING_FOR_DATE_LIFE: [MessageHandler(filters.TEXT & ~filters.COMMAND, calculate_life_expectancy)]},
-        fallbacks=[],
-    )
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("reset", reset))
-    application.add_handler(conv_lived)
-    application.add_handler(conv_birthday)
-    application.add_handler(conv_life)
-
+    application.add_handler(conv_handler)
     application.run_polling()
 
 if __name__ == "__main__":
