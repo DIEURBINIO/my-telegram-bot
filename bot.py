@@ -64,6 +64,11 @@ async def calculate_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE)
         else:
             birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
             context.user_data["birth_date"] = birth_date
+
+        if isinstance(birth_date, str):
+            birth_date = datetime.strptime(birth_date, "%d.%m.%Y")
+            context.user_data["birth_date"] = birth_date
+
         today = datetime.now()
         next_birthday = birth_date.replace(year=today.year)
         if next_birthday < today:
@@ -82,6 +87,11 @@ async def calculate_life_expectancy(update: Update, context: ContextTypes.DEFAUL
         else:
             birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
             context.user_data["birth_date"] = birth_date
+
+        if isinstance(birth_date, str):
+            birth_date = datetime.strptime(birth_date, "%d.%m.%Y")
+            context.user_data["birth_date"] = birth_date
+
         life_expectancy_years = random.randint(60, 100)
         death_date = birth_date.replace(year=birth_date.year + life_expectancy_years)
         remaining_time = death_date - datetime.now()
