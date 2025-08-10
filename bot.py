@@ -8,10 +8,12 @@ TOKEN = os.getenv("TOKEN")
 
 WAITING_FOR_DATE, WAITING_FOR_DATE_BIRTHDAY, WAITING_FOR_DATE_LIFE = range(3)
 
-keyboard = [["Сколько дней я прожил"],
-            ["Сколько дней до дня рождения"],
-            ["Сколько мне осталось жить"],
-            ["/reset"]]
+keyboard = [
+    ["Сколько дней я прожил"],
+    ["Сколько дней до дня рождения"],
+    ["Сколько мне осталось жить"],
+    ["/reset"]
+]
 
 markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -19,37 +21,42 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Выберите действие:", reply_markup=markup)
 
 async def reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.pop("birth_date", None)
+    context.user_data.pop("birth_date_str", None)
     await update.message.reply_text("Дата рождения удалена. В следующий раз вас попросят ввести её заново.", reply_markup=markup)
 
 async def ask_birthdate_lived(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "birth_date" in context.user_data:
+    if "birth_date_str" in context.user_data:
         await calculate_lived(update, context)
         return ConversationHandler.END
     await update.message.reply_text("Введите дату рождения в формате ДД.ММ.ГГГГ:")
     return WAITING_FOR_DATE
 
 async def ask_birthdate_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "birth_date" in context.user_data:
+    if "birth_date_str" in context.user_data:
         await calculate_birthday(update, context)
         return ConversationHandler.END
     await update.message.reply_text("Введите дату рождения в формате ДД.ММ.ГГГГ:")
     return WAITING_FOR_DATE_BIRTHDAY
 
 async def ask_birthdate_life(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if "birth_date" in context.user_data:
+    if "birth_date_str" in context.user_data:
         await calculate_life_expectancy(update, context)
         return ConversationHandler.END
     await update.message.reply_text("Введите дату рождения в формате ДД.ММ.ГГГГ:")
     return WAITING_FOR_DATE_LIFE
 
+def parse_birth_date(date_str):
+    return datetime.strptime(date_str, "%d.%m.%Y")
+
 async def calculate_lived(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        if "birth_date" in context.user_data:
-            birth_date = context.user_data["birth_date"]
+        if "birth_date_str" in context.user_data:
+            birth_date_str = context.user_data["birth_date_str"]
         else:
-            birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
-            context.user_data["birth_date"] = birth_date
+            birth_date_str = update.message.text
+            context.user_data["birth_date_str"] = birth_date_str
+
+        birth_date = parse_birth_date(birth_date_str)
         days_lived = (datetime.now() - birth_date).days
         await update.message.reply_text(f"Вы прожили {days_lived} дней.", reply_markup=markup)
     except ValueError:
@@ -59,16 +66,13 @@ async def calculate_lived(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def calculate_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        if "birth_date" in context.user_data:
-            birth_date = context.user_data["birth_date"]
+        if "birth_date_str" in context.user_data:
+            birth_date_str = context.user_data["birth_date_str"]
         else:
-            birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
-            context.user_data["birth_date"] = birth_date
+            birth_date_str = update.message.text
+            context.user_data["birth_date_str"] = birth_date_str
 
-        if isinstance(birth_date, str):
-            birth_date = datetime.strptime(birth_date, "%d.%m.%Y")
-            context.user_data["birth_date"] = birth_date
-
+        birth_date = parse_birth_date(birth_date_str)
         today = datetime.now()
         next_birthday = birth_date.replace(year=today.year)
         if next_birthday < today:
@@ -82,16 +86,13 @@ async def calculate_birthday(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def calculate_life_expectancy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        if "birth_date" in context.user_data:
-            birth_date = context.user_data["birth_date"]
+        if "birth_date_str" in context.user_data:
+            birth_date_str = context.user_data["birth_date_str"]
         else:
-            birth_date = datetime.strptime(update.message.text, "%d.%m.%Y")
-            context.user_data["birth_date"] = birth_date
+            birth_date_str = update.message.text
+            context.user_data["birth_date_str"] = birth_date_str
 
-        if isinstance(birth_date, str):
-            birth_date = datetime.strptime(birth_date, "%d.%m.%Y")
-            context.user_data["birth_date"] = birth_date
-
+        birth_date = parse_birth_date(birth_date_str)
         life_expectancy_years = random.randint(60, 100)
         death_date = birth_date.replace(year=birth_date.year + life_expectancy_years)
         remaining_time = death_date - datetime.now()
